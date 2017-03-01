@@ -29,7 +29,7 @@ const personQuery = gql`
       name
     }
   }`;
-  
+
 const personResult = {
   data: {
     person: {
@@ -46,23 +46,22 @@ describe('Meteor Client config', () => {
     const clientConfig = meteorClientConfig({
       addTypename: false, // this is not a default option of the meteorClientConfig
     });
-    
+
     assert.isFalse(clientConfig.addTypename);
   });
-  
+
   it('should replace some options while keeping the other options', () => {
-    
     const fakeCustomInterface = {
       fakeProperty: 42,
-    };  
-    
+    };
+
     // replace the default network interface to use by a fake one
     // and replace the normalization function
     const clientConfig = meteorClientConfig({
       networkInterface: fakeCustomInterface,
       dataIdFromObject: null,
     });
-    
+
     // we should still have access the ssrMode default configuration value
     assert.deepEqual(clientConfig, {
       networkInterface: {
@@ -72,43 +71,38 @@ describe('Meteor Client config', () => {
       ssrMode: false,
     });
   });
-  
+
   it('should extend the default config of the network interface', () => {
-    
     // extend the opts ultimately passed to fetch
     const networkInterface = createMeteorNetworkInterface({
       opts: {
         credentials: 'same-origin',
       },
-    });  
-    
+    });
+
     const clientConfig = meteorClientConfig({ networkInterface });
-    
+
     // ApolloClient's 'createNetworkInterface' assign 'opts' to '_opts' in its constructor
     assert.deepEqual(clientConfig.networkInterface._opts, { credentials: 'same-origin' });
   });
 });
 
 describe('Network interface', () => {
-  
   it('should create a network interface and not a batching interface', () => {
     const networkInterface = createMeteorNetworkInterface({ batchingInterface: false });
-    
+
     // as opposed to HTTPBatchedNetworkInterface
     assert.equal(networkInterface.constructor.name, 'HTTPFetchNetworkInterface');
   });
-  
 });
 
 describe('Query deduplication', () => {
-  
   const randomQuery = gql`
     query {
       randomString
     }`;
-  
+
   it('does not deduplicate queries by default', () => {
-    
     // we have two responses for identical queries, but only the first should be requested.
     // the second one should never make it through to the network interface.
     const client = new ApolloClient(meteorClientConfig());
@@ -123,11 +117,10 @@ describe('Query deduplication', () => {
   });
 
   it('deduplicates queries if the option is set', () => {
-
     // we have two responses for identical queries, but only the first should be requested.
     // the second one should never make it through to the network interface.
-    
-    const client = new ApolloClient(meteorClientConfig({queryDeduplication: true}));
+
+    const client = new ApolloClient(meteorClientConfig({ queryDeduplication: true }));
 
     const q1 = client.query({ query: randomQuery });
     const q2 = client.query({ query: randomQuery });
@@ -137,74 +130,81 @@ describe('Query deduplication', () => {
       assert.deepEqual(result1.data, result2.data);
     });
   });
-  
 });
 
 describe('Batching network interface', function() {
-  
   // from apollo-client/src/transport/networkInterface
-  const printRequest = request => ({...request, query: print(request.query)});
-  
+  const printRequest = request => ({ ...request, query: print(request.query) });
+
   // from apollo-client/test
   // Helper method that tests a roundtrip given a particular set of requests to the
   // batched network interface
-  const assertRoundtrip = ({
-    requestResultPairs,
-    opts = {},
-  }) => {
+  const assertRoundtrip = (
+    {
+      requestResultPairs,
+      opts = {},
+    }
+  ) => {
     const batchedNetworkInterface = createMeteorNetworkInterface({
       batchingInterface: true,
-      opts
+      opts,
     });
-  
+
     const printedRequests = [];
     const resultList = [];
     requestResultPairs.forEach(({ request, result }) => {
       printedRequests.push(printRequest(request));
       resultList.push(result);
     });
-  
-    return batchedNetworkInterface.batchQuery(requestResultPairs.map(({ request }) => request))
-      .then((results) => {
+
+    return batchedNetworkInterface
+      .batchQuery(requestResultPairs.map(({ request }) => request))
+      .then(results => {
         assert.deepEqual(results, resultList);
       });
   };
-  
-  it('should create a batching interface & correctly return the result for a single request', () => {
-    return assertRoundtrip({
-      requestResultPairs: [{
-        request: { query: authorQuery },
-        result: authorResult,
-      }],
-    });
-  });
-  
-  it('should should create a batching interface & correctly return the results for multiple requests', () => {
-    return assertRoundtrip({
-      requestResultPairs: [
-        {
-          request: { query: authorQuery },
-          result: authorResult,
-        },
-        {
-          request: { query: personQuery },
-          result: personResult,
-        },
-      ],
-    });
-  });
 
+  it(
+    'should create a batching interface & correctly return the result for a single request',
+    () => {
+      return assertRoundtrip({
+        requestResultPairs: [
+          {
+            request: { query: authorQuery },
+            result: authorResult,
+          },
+        ],
+      });
+    }
+  );
+
+  it(
+    'should should create a batching interface & correctly return the results for multiple requests',
+    () => {
+      return assertRoundtrip({
+        requestResultPairs: [
+          {
+            request: { query: authorQuery },
+            result: authorResult,
+          },
+          {
+            request: { query: personQuery },
+            result: personResult,
+          },
+        ],
+      });
+    }
+  );
 });
 
 describe('User Accounts', function() {
-  
   // create a test util to compare a test login token to the one stored in local storage
   const TestLoginToken = (batchingInterface = true) => {
     // default test login token value
     let token = null;
-    
+
     const middlewareFn = batchingInterface ? 'applyBatchMiddleware' : 'applyMiddleware';
-    
+
     return {
       // returns the value of the test login token
       get: () => token,
@@ -281,20 +281,23 @@ describe('User Accounts', function() {
       })
       .catch(error => done(error));
   });
-  
-  it('should not use Meteor Accounts middleware when a login token is set directly from the client', () => {
-    // a note adressed to someone who runs tests and looks at the client-side console
-    console.log('Note: the error shown in the console below comes from the test "should not use Meteor Accounts middleware when a login token is set directly from the client".');
-    
-    // create an "invalid" network interface
-    const networkInterface = createMeteorNetworkInterface({
-      useMeteorAccounts: true,
-      loginToken: 'xyz',
-    });
-    
-    // there shouldn't be any middleware (i.e. not the Meteor Accounts middleware) attached
-    assert.lengthOf(networkInterface._middlewares, 0);
-  });
-  
+
+  it(
+    'should not use Meteor Accounts middleware when a login token is set directly from the client',
+    () => {
+      // a note adressed to someone who runs tests and looks at the client-side console
+      console.log(
+        'Note: the error shown in the console below comes from the test "should not use Meteor Accounts middleware when a login token is set directly from the client".'
+      );
+
+      // create an "invalid" network interface
+      const networkInterface = createMeteorNetworkInterface({
+        useMeteorAccounts: true,
+        loginToken: 'xyz',
+      });
+
+      // there shouldn't be any middleware (i.e. not the Meteor Accounts middleware) attached
+      assert.lengthOf(networkInterface._middlewares, 0);
+    }
+  );
 });
-  
